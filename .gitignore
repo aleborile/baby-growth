@@ -11,6 +11,9 @@ node_modules
 .env
 .env.local
 
+# svelte-kit
+
+
 # opennext
 .open-next
 
