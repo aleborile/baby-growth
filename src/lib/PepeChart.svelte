@@ -5,21 +5,41 @@
   import * as Chart from "$lib/components/ui/chart/index.js";
   import * as Card from "$lib/components/ui/card/index.js";
   import { add as addDate } from "date-fns";
+  import { MediaQuery } from "svelte/reactivity";
+
+  const isMobile = new MediaQuery("(max-width: 640px)");
 
   const birthDate = new Date("2025-12-11");
 
-  // Calculate current month based on browser's current date
-  const currentMonth = $derived.by(() => {
+  // Calculate current age in months and days
+  const currentAge = $derived.by(() => {
     const now = new Date();
-    const diffMs = now.getTime() - birthDate.getTime();
-    const diffDays = diffMs / (1000 * 60 * 60 * 24);
-    return diffDays / 30.44;
+    let months = (now.getFullYear() - birthDate.getFullYear()) * 12 + (now.getMonth() - birthDate.getMonth());
+    let days = now.getDate() - birthDate.getDate();
+    if (days < 0) {
+      months--;
+      const prevMonth = new Date(now.getFullYear(), now.getMonth(), 0);
+      days += prevMonth.getDate();
+    }
+    return { months, days };
   });
+
+  const currentMonth = $derived(currentAge.months + currentAge.days / 30);
 
   function getFullCalendarMonth(chartMonth: number): string {
     const months = [
-      "January", "February", "March", "April", "May", "June",
-      "July", "August", "September", "October", "November", "December",
+      "January",
+      "February",
+      "March",
+      "April",
+      "May",
+      "June",
+      "July",
+      "August",
+      "September",
+      "October",
+      "November",
+      "December",
     ];
     const calendarMonthIndex = (11 + Math.round(chartMonth)) % 12;
     return months[calendarMonthIndex];
@@ -74,26 +94,40 @@
     const lastMonth = measurements[measurements.length - 1].month;
     const points: { date: Date; month: number; length: number }[] = [];
 
-    for (let m = lastMonth; m <= 24; m += 1) {
-      const ageAdjust = Math.max(0.4, 1 - (m - lastMonth) * 0.03);
-      const estimatedLength =
-        intercept + slope * m * ageAdjust + (1 - ageAdjust) * slope * lastMonth;
+    // Start from month 0, use real measurements when available
+    for (let m = 0; m <= 24; m += 1) {
+      const measurement = measurements.find((mes) => mes.month === m);
+      let length: number;
+
+      if (measurement) {
+        // Use actual measurement
+        length = measurement.length;
+      } else {
+        // Use estimation with age adjustment for future months
+        const ageAdjust = Math.max(0.4, 1 - (m - lastMonth) * 0.03);
+        length = Math.max(0, intercept + slope * m * ageAdjust + (1 - ageAdjust) * slope * lastMonth);
+      }
+
       points.push({
         date: addDate(birthDate, { months: m }),
         month: m,
-        length: Math.max(0, estimatedLength),
+        length,
       });
     }
 
     return points;
   });
 
-  const chartData = $derived.by(() =>
+  // All months data for the list
+  const allMonthsData = $derived.by(() =>
     Array.from(Array(24), (_, i) => i).map((month) => {
-      const measurementLength = measurements.find((m) => m.month === month)?.length;
+      const measurementLength = measurements.find(
+        (m) => m.month === month,
+      )?.length;
       const estimateLength = estimation.find((e) => e.month === month)?.length;
       const lengthForSize = measurementLength ?? estimateLength;
       return {
+        idx: month,
         date: addDate(birthDate, { months: month }),
         length: measurementLength,
         estimate: estimateLength,
@@ -102,27 +136,48 @@
     }),
   );
 
+  // Filtered data for chart (every 3 months on mobile)
+  const chartData = $derived.by(() => {
+    const step = isMobile.current ? 3 : 1;
+    return allMonthsData.filter((d) => d.idx % step === 0);
+  });
+
   const chartConfig = {
     length: { label: "length", color: "red" },
     estimate: { label: "estimate", color: "green" },
   } satisfies Chart.ChartConfig;
+
 </script>
 
+<svelte:head>
+  <title>Pepé Chart</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin="anonymous" />
+  <link href="https://fonts.googleapis.com/css2?family=Great+Vibes&display=swap" rel="stylesheet" />
+</svelte:head>
+
 <!-- Age & Size Header -->
-<div class="mb-6 p-6 rounded-xl bg-linear-to-r from-blue-500 to-purple-500 text-white">
-  <div class="flex flex-wrap items-center justify-between gap-4">
+<div
+  class="mb-6 p-6 rounded-xl bg-linear-to-r from-blue-400 to-blue-600 text-white relative"
+>
+  <span class="absolute top-3 left-3 text-3xl">🍼</span>
+  <span class="absolute top-3 right-3 text-3xl">👶</span>
+  <div class="text-center mb-4">
+    <span class="text-5xl" style="font-family: 'Great Vibes', cursive;">Pepé</span>
+  </div>
+  <div class="flex flex-wrap items-center justify-between gap-2 sm:gap-4">
     <div>
-      <div class="text-sm opacity-80">Current Age</div>
-      <div class="text-3xl font-bold">{Math.floor(currentMonth)} months</div>
-      <div class="text-sm opacity-80">
+      <div class="text-xs sm:text-sm opacity-80">Current Age</div>
+      <div class="text-lg sm:text-3xl font-bold">{currentAge.months} months and {currentAge.days} {currentAge.days === 1 ? 'day' : 'days'}</div>
+      <div class="text-xs sm:text-sm opacity-80">
         {getFullCalendarMonth(currentMonth)} 2026
       </div>
     </div>
     {#if currentSize}
       <div class="text-right">
-        <div class="text-sm opacity-80">Current Size</div>
-        <div class="text-3xl font-bold">Taglia {currentSize}</div>
-        <div class="text-sm opacity-80">
+        <div class="text-xs sm:text-sm opacity-80">Current Size</div>
+        <div class="text-lg sm:text-3xl font-bold">Taglia {currentSize}</div>
+        <div class="text-xs sm:text-sm opacity-80">
           {measurements[measurements.length - 1]?.length} cm
         </div>
       </div>
@@ -132,42 +187,44 @@
 
 <Card.Root>
   <Card.Header>
-    <Card.Title>Pepe Chart</Card.Title>
+    <Card.Title>Pepé</Card.Title>
     <Card.Description>Growth estimation with dress sizes</Card.Description>
   </Card.Header>
   <Card.Content>
     <Chart.Container config={chartConfig}>
       <LineChart
-        points={{ r: 4 }}
-        labels={{ offset: 12 }}
+        points={{ r: 4, }}
+        labels={{ offset: 10 }}
         data={chartData}
+        grid={{y:true, x:true}}
         x="date"
         axis="x"
         xScale={scaleUtc()}
         series={[
           {
-            key: "length",
-            label: "length",
-            color: chartConfig.length.color,
-          },
-          {
             key: "estimate",
             label: "estimate",
             color: chartConfig.estimate.color,
+          },
+          {
+            key: "length",
+            label: "length",
+            color: chartConfig.length.color,
           },
         ]}
         props={{
           spline: { curve: curveNatural, motion: "tween", strokeWidth: 2 },
           highlight: {
             points: {
-              motion: "none",
+              motion: "spring",
               r: 6,
             },
           },
           xAxis: {
             format: (v: Date) =>
-              v.toLocaleDateString("en-US", { month: "short" }),
+              v.toLocaleDateString("it-IT", { month: "short", year: "2-digit" }),
           },
+          points: { r: 4 },
         }}
       >
         {#snippet tooltip()}
@@ -180,7 +237,15 @@
             }}
             indicator="line"
           >
-            {#snippet formatter({ value, name, item }: { value: unknown; name: string; item: { payload?: { dressSize?: string } } })}
+            {#snippet formatter({
+              value,
+              name,
+              item,
+            }: {
+              value: unknown;
+              name: string;
+              item: { payload?: { dressSize?: string } };
+            })}
               <div class="flex flex-1 justify-between items-center gap-2">
                 <span class="text-muted-foreground">{name}</span>
                 <span class="font-mono font-medium">
@@ -213,20 +278,25 @@
 <Card.Root class="mt-6">
   <Card.Header>
     <Card.Title>Monthly Growth Details</Card.Title>
-    <Card.Description>Estimated growth with dress sizes by month</Card.Description>
+    <Card.Description
+      >Estimated growth with dress sizes by month</Card.Description
+    >
   </Card.Header>
   <Card.Content>
     <div class="grid gap-2">
-      {#each chartData as data, i (i)}
+      {#each allMonthsData as data (data.idx)}
         {#if data.estimate || data.length}
-          <div class="flex items-center justify-between p-3 rounded-lg bg-muted/50 hover:bg-muted transition-colors">
+          <div
+            class="flex items-center justify-between p-3 rounded-lg bg-muted/50 hover:bg-muted transition-colors"
+          >
             <div class="flex items-center gap-3">
-              <div class="text-sm font-medium w-20">
-                {data.date.toLocaleDateString("en-US", { month: "short", year: "2-digit" })}
-              </div>
-              <div class="text-xs text-muted-foreground">
-                Month {i}
-              </div>
+              <span class="text-xs px-2 py-0.5 rounded-full bg-muted-foreground/20 font-mono">{data.idx}</span>
+              <span class="text-sm font-bold">
+                {data.date.toLocaleDateString("en-US", {
+                  month: "short",
+                  year: "2-digit",
+                })}
+              </span>
             </div>
             <div class="flex items-center gap-4">
               {#if data.length}
@@ -238,11 +308,15 @@
               {#if data.estimate}
                 <div class="flex items-center gap-2">
                   <span class="w-2 h-2 rounded-full bg-green-500"></span>
-                  <span class="text-sm font-mono">{data.estimate.toFixed(1)} cm</span>
+                  <span class="text-sm font-mono"
+                    >{data.estimate.toFixed(1)} cm</span
+                  >
                 </div>
               {/if}
               {#if data.dressSize}
-                <div class="text-xs px-2 py-1 rounded bg-primary/10 text-primary font-medium">
+                <div
+                  class="text-xs px-2 py-1 rounded bg-primary/10 text-primary font-medium"
+                >
                   Taglia {data.dressSize}
                 </div>
               {/if}
