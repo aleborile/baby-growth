@@ -1,5 +1,6 @@
 <script lang="ts">
   import GrowthChart from '$lib/GrowthChart.svelte';
+  import PepeChart from '$lib/PepeChart.svelte';
 </script>
 
 <svelte:head>
@@ -7,5 +8,5 @@
 </svelte:head>
 
 <main class="min-h-screen p-6 md:p-10 bg-gradient-to-br from-blue-50 to-purple-50">
-  <GrowthChart />
+  <PepeChart />
 </main>

@@ -10,10 +10,12 @@
     Spline,
     Svg,
     Tooltip,
+    add,
   } from "layerchart";
   import { scaleUtc } from "d3-scale";
   import { curveNatural } from "d3-shape";
   import { cubicInOut } from "svelte/easing";
+  import { add as addDate } from "date-fns";
 
   // Birth date reference: month 0 = December 11, 2025
   const birthDate = new Date(2025, 11, 11);
@@ -91,12 +93,15 @@
     ],
   };
 
-  // Baby's recorded measurements
-  let measurements = $state<{ month: number; length: number }[]>([
-    { month: 0, length: 55 },
-    { month: 1, length: 58 },
-    { month: 2, length: 61 },
+   // Baby's recorded measurements
+  let measurements = $state<
+    { month: number; date: Date; length: number }[]
+  >([
+    { month: 0, date: addDate(birthDate, { months: 1 }), length: 55 },
+    { month: 1, date: addDate(birthDate, { months: 2 }), length: 58 },
+    { month: 2, date: addDate(birthDate, { months: 3 }), length: 61 },
   ]);
+
 
   // Input state
   let newMonth = $state(3);
@@ -115,31 +120,17 @@
     const intercept = (sumY - slope * sumX) / n;
 
     const lastMonth = measurements[measurements.length - 1].month;
-    const points: { month: number; length: number }[] = [];
+    const points: { date: Date, month: number; length: number }[] = [];
 
     for (let m = lastMonth; m <= 24; m += 1) {
       const ageAdjust = Math.max(0.4, 1 - (m - lastMonth) * 0.03);
       const estimatedLength =
         intercept + slope * m * ageAdjust + (1 - ageAdjust) * slope * lastMonth;
-      points.push({ month: m, length: Math.max(0, estimatedLength) });
+      points.push({ date: addDate(birthDate, {months: m}), month: m, length: Math.max(0, estimatedLength) });
     }
 
     return points;
   });
-
-  function addMeasurement() {
-    if (newMonth >= 0 && newMonth <= 24 && newLength > 0) {
-      measurements = [
-        ...measurements,
-        { month: newMonth, length: newLength },
-      ].sort((a, b) => a.month - b.month);
-      newMonth = Math.min(24, measurements[measurements.length - 1].month + 1);
-    }
-  }
-
-  function removeMeasurement(index: number) {
-    measurements = measurements.filter((_, i) => i !== index);
-  }
 
   // Dress sizes (Italian/EU sizing)
   const dressSizes = [
@@ -284,7 +275,7 @@
     baby: "hsl(217 91% 60%)",
     projection: "hsl(142 71% 45%)",
   };
-
+ 
   const chartData = [
     { date: new Date("2024-04-01"), desktop: 222, mobile: 150 },
     { date: new Date("2024-04-02"), desktop: 97, mobile: 180 },
@@ -379,39 +370,9 @@
     { date: new Date("2024-06-30"), desktop: 446, mobile: 400 },
   ];
 
-  let timeRange = $state("90d");
-
-  const selectedLabel = $derived.by(() => {
-    switch (timeRange) {
-      case "90d":
-        return "Last 3 months";
-      case "30d":
-        return "Last 30 days";
-      case "7d":
-        return "Last 7 days";
-      default:
-        return "Last 3 months";
-    }
-  });
-
-  const filteredData = $derived(
-    chartData.filter((item) => {
-      // eslint-disable-next-line svelte/prefer-svelte-reactivity
-      const referenceDate = new Date("2024-06-30");
-      let daysToSubtract = 90;
-      if (timeRange === "30d") {
-        daysToSubtract = 30;
-      } else if (timeRange === "7d") {
-        daysToSubtract = 7;
-      }
-
-      referenceDate.setDate(referenceDate.getDate() - daysToSubtract);
-      return item.date >= referenceDate;
-    }),
-  );
 
   const chartConfig = {
-    desktop: { label: "Desktop", color: "var(--chart-1)" },
+    pepe: { label: "pepe", color: "var(--chart-1)" },
     mobile: { label: "Mobile", color: "var(--chart-2)" },
   } satisfies Chart.ChartConfig;
 </script>
@@ -459,19 +420,14 @@
       >
         <AreaChart
           legend
-          data={filteredData}
+          data={estimation}
           x="date"
           xScale={scaleUtc()}
           series={[
             {
-              key: "mobile",
-              label: "Mobile",
+              key: "length",
+              label: "pepe",
               color: chartConfig.mobile.color,
-            },
-            {
-              key: "desktop",
-              label: "Desktop",
-              color: chartConfig.desktop.color,
             },
           ]}
           seriesLayout="stack"
@@ -483,7 +439,7 @@
               motion: "tween",
             },
             xAxis: {
-              ticks: timeRange === "7d" ? 7 : undefined,
+              ticks: 7,
               format: (v) => {
                 return v.toLocaleDateString("en-US", {
                   month: "short",
@@ -531,7 +487,7 @@
               {#each series as s, i (s.key)}
                 <Area
                   {...getAreaProps(s, i)}
-                  fill={s.key === "desktop"
+                  fill={s.key === "pepe"
                     ? "url(#fillDesktop)"
                     : "url(#fillMobile)"}
                 />
@@ -543,6 +499,7 @@
               labelFormatter={(v: Date) => {
                 return v.toLocaleDateString("en-US", {
                   month: "long",
+                  year: "2-digit"
                 });
               }}
               indicator="line"
